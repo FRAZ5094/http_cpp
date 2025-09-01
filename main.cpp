@@ -1,6 +1,8 @@
+#include <arpa/inet.h>
 #include <cstdio>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 int main() {
 
@@ -31,14 +33,21 @@ int main() {
   while (1) {
     struct sockaddr_in conn_addr;
     socklen_t conn_addr_size = sizeof(conn_addr);
-    int conn_fd = accept(listen_fd, (struct sockaddr *)NULL, NULL);
-
-    printf("Client connected!\n");
+    int conn_fd =
+        accept(listen_fd, (struct sockaddr *)&conn_addr, &conn_addr_size);
 
     if (conn_fd == -1) {
       perror("accept");
       return 1;
     }
+
+    printf("Client connected!\n");
+
+    printf("Client addr: %s\n", inet_ntoa(conn_addr.sin_addr));
+    printf("Client port: %u\n", ntohs(conn_addr.sin_port));
+
+    printf("Closed conn_fd\n");
+    close(conn_fd);
   }
 
   return 0;

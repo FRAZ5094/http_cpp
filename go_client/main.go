@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 )
 
 func main() {
@@ -18,10 +19,14 @@ func main() {
 
 	bytes[0] = 1
 
-	conn.Write(bytes)
-	fmt.Println("Send bytes")
-
 	for {
+		n, err := conn.Write(bytes)
+		if err != nil {
+			fmt.Println("Write error:", err)
+			break
+		}
+		fmt.Println("Sent bytes:", n)
+		time.Sleep(100 * time.Millisecond)
 	}
 
 }
