@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -15,9 +16,11 @@ func main() {
 
 	fmt.Println("connected!")
 
-	bytes := make([]byte, 1)
+	bytes := make([]byte, 2)
 
-	bytes[0] = 1
+	binary.BigEndian.PutUint16(bytes, 325)
+
+	fmt.Printf("%d, %d", bytes[0], bytes[1])
 
 	for {
 		n, err := conn.Write(bytes)

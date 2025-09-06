@@ -1,10 +1,17 @@
 #include <arpa/inet.h>
+#include <cstdint>
 #include <cstdio>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+struct test {
+  char s;
+  char s2;
+};
+
 int main() {
+  int port = 8181;
 
   int listen_fd;
 
@@ -16,7 +23,7 @@ int main() {
   struct in_addr addr{.s_addr = htonl(INADDR_ANY)};
 
   struct sockaddr_in serv_addr = {
-      .sin_family = AF_INET, .sin_port = htons(8181), .sin_addr = addr
+      .sin_family = AF_INET, .sin_port = htons(port), .sin_addr = addr
 
   };
 
@@ -29,6 +36,10 @@ int main() {
     perror("listen");
     return 1;
   }
+
+  printf("Server started on http://localhost:%d\n", port);
+
+  char buffer[256];
 
   while (1) {
     struct sockaddr_in conn_addr;
@@ -46,9 +57,9 @@ int main() {
     printf("Client addr: %s\n", inet_ntoa(conn_addr.sin_addr));
     printf("Client port: %u\n", ntohs(conn_addr.sin_port));
 
-    printf("Closed conn_fd\n");
-    close(conn_fd);
+    uint16_t version;
+    read(conn_fd, &version, sizeof(version));
+    printf("Data from client=%u\n", ntohs(version));
+    return 0;
   }
-
-  return 0;
 }
