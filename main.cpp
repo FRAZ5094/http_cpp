@@ -1,10 +1,11 @@
 #include <arpa/inet.h>
-#include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <netinet/in.h>
+#include <stdio.h>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -64,11 +65,17 @@ int main() {
 
     read(conn_fd, &buffer, sizeof(buffer));
     printf("Data from client:\n%s\n", buffer);
-    char const *res = "HTTP/1.1 200 OK\r\n"
+    char const *html = "This is my html";
+    char const content_length = strlen(html);
+    std::string res = "HTTP/1.1 200 OK\r\n"
                       "Content-Type: text/html\r\n"
+                      "Content-Length: " +
+                      std::to_string(content_length) +
+                      "\r\n"
                       "\r\n"
                       "This is my html";
-    write(conn_fd, res, strlen(res));
+
+    write(conn_fd, res.c_str(), res.length());
     close(conn_fd);
   }
   close(listen_fd);
