@@ -1,2 +1,2 @@
 default:
-	g++ main.cpp -o main && ./main
+	g++ *.cpp -o main && ./main

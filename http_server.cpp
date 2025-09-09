@@ -1,0 +1,83 @@
+#include "include/http_server.h"
+#include <arpa/inet.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string>
+#include <sys/socket.h>
+#include <unistd.h>
+
+HttpServer::HttpServer(int port) : _port(port) {}
+
+HttpServer::~HttpServer() { close(_server_fd); }
+int HttpServer::start() {
+  int opt = 1;
+
+  if ((_server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    perror("socket");
+    return 1;
+  }
+
+  if (setsockopt(_server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    perror("setsockopt");
+    exit(EXIT_FAILURE);
+  }
+
+  struct in_addr addr{.s_addr = htonl(INADDR_ANY)};
+
+  struct sockaddr_in serv_addr = {
+      .sin_family = AF_INET, .sin_port = htons(_port), .sin_addr = addr
+
+  };
+
+  if (bind(_server_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) ==
+      -1) {
+    perror("bind");
+    return 1;
+  }
+
+  if (listen(_server_fd, 10) == -1) {
+    perror("listen");
+    return 1;
+  }
+
+  printf("Server started on http://localhost:%d\n", _port);
+  while (1) {
+    int conn_fd = _accept_request();
+    _handle_request(conn_fd);
+  }
+  return 0;
+}
+
+int HttpServer::_accept_request() {
+
+  struct sockaddr_in conn_addr;
+  socklen_t conn_addr_size = sizeof(conn_addr);
+  int conn_fd =
+      accept(_server_fd, (struct sockaddr *)&conn_addr, &conn_addr_size);
+  printf("Client connected!\n");
+  printf("Client addr: %s\n", inet_ntoa(conn_addr.sin_addr));
+  printf("Client port: %u\n", ntohs(conn_addr.sin_port));
+  return conn_fd;
+}
+
+int HttpServer::_handle_request(int conn_fd) {
+  char buffer[1024 * 8];
+  read(conn_fd, &buffer, sizeof(buffer));
+  printf("Data from client:\n%s\n", buffer);
+  char const *html = "This is my html";
+  char const content_length = strlen(html);
+  std::string res = "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html\r\n"
+                    "Content-Length: " +
+                    std::to_string(content_length) +
+                    "\r\n"
+                    "\r\n"
+                    "This is my html";
+  printf("Response:\n%s\n", res.c_str());
+  write(conn_fd, res.c_str(), res.length());
+  close(conn_fd);
+  return 0;
+};
