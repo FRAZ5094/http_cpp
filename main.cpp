@@ -1,5 +1,6 @@
 // #include "include/http_server.h"
 // #include <cstdint>
+#include "include/http_server.h"
 #include <chrono>
 #include <cstdio>
 #include <fcntl.h>
@@ -58,11 +59,15 @@ float bench_mark(void (*func)()) {
 
 int main() {
 
-  float sendfile_avg = bench_mark(&write_sendfile);
-  float read_write_avg = bench_mark(&write_read_write);
+  HttpServer server(8181);
 
-  printf("sendfile avg: %.1f\n", sendfile_avg);
-  printf("read_write avg: %.1f\n", read_write_avg);
+  server.start();
+
+  // float sendfile_avg = bench_mark(&write_sendfile);
+  // float read_write_avg = bench_mark(&write_read_write);
+
+  // printf("sendfile avg: %.1f\n", sendfile_avg);
+  // printf("read_write avg: %.1f\n", read_write_avg);
 
   return 0;
 }

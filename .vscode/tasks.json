@@ -8,9 +8,9 @@
       "args": [
         "-fdiagnostics-color=always",
         "-g",
-        "${file}",
+        "${fileDirname}/*.cpp",
         "-o",
-        "${fileDirname}/${fileBasenameNoExtension}"
+        "${fileDirname}/main"
       ],
       "options": {
         "problemMatcher": ["$gcc"]

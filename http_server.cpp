@@ -1,12 +1,16 @@
 #include "include/http_server.h"
 #include <arpa/inet.h>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <string>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 HttpServer::HttpServer(int port) : _port(port) {}
@@ -66,18 +70,31 @@ int HttpServer::_accept_request() {
 int HttpServer::_handle_request(int conn_fd) {
   char buffer[1024 * 8];
   read(conn_fd, &buffer, sizeof(buffer));
-  printf("Data from client:\n%s\n", buffer);
-  char const *html = "This is my html";
-  char const content_length = strlen(html);
+  int file_fd = open("index.html", O_RDONLY);
+
+  struct stat st;
+
+  fstat(file_fd, &st);
+
+  int file_len = st.st_size;
+
   std::string res = "HTTP/1.1 200 OK\r\n"
                     "Content-Type: text/html\r\n"
                     "Content-Length: " +
-                    std::to_string(content_length) +
+                    std::to_string(file_len) +
                     "\r\n"
-                    "\r\n"
-                    "This is my html";
-  printf("Response:\n%s\n", res.c_str());
+                    "\r\n";
+  auto start = std::chrono::high_resolution_clock::now();
   write(conn_fd, res.c_str(), res.length());
+  sendfile(conn_fd, file_fd, NULL, file_len);
+  auto end = std::chrono::high_resolution_clock::now();
+
+  auto duration =
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+  printf("Duration to write response: %ldus\n", duration.count());
+
+  close(file_fd);
   close(conn_fd);
   return 0;
 };
