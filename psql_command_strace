@@ -1,0 +1,37 @@
+// Value returned from command: strace -v -s 1000 psql mux_dev -c "SELECT id from performed_set LIMIT 1;"
+
+// AF_UNIX is for a local socket connection, is non blocking so needs to be polled for data (see below)
+socket(AF_UNIX, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, 0) = 3
+
+// connects to the socket on the run path for postgres
+connect(3, {sa_family=AF_UNIX, sun_path="/run/postgresql/.s.PGSQL.5432"}, 110) = 0
+
+getsockopt(3, SOL_SOCKET, SO_ERROR, [0], [4]) = 0
+getsockname(3, {sa_family=AF_UNIX}, [128 => 2]) = 0
+
+// poll for fd to be writeable
+poll([{fd=3, events=POLLOUT|POLLERR}], 1, -1) = 1 ([{fd=3, revents=POLLOUT}])
+sendto(3, "\0\0\0Q\0\3\0\0user\0fraser\0database\0mux_dev\0application_name\0psql\0client_encoding\0UTF8\0\0", 81, MSG_NOSIGNAL, NULL, 0) = 81
+
+// poll for fd to be readable
+poll([{fd=3, events=POLLIN|POLLERR}], 1, -1) = 1 ([{fd=3, revents=POLLIN}])
+recvfrom(3, "R\0\0\0\10\0\0\0\0S\0\0\0\27in_hot_standby\0off\0S\0\0\0\31integer_datetimes\0on\0S\0\0\0\25TimeZone\0Etc/UTC\0S\0\0\0\33IntervalStyle\0postgres\0S\0\0\0\24is_superuser\0on\0S\0\0\0\32application_name\0psql\0S\0\0\0&default_transaction_read_only\0off\0S\0\0\0\32scram_iterations\0004096\0S\0\0\0\27DateStyle\0ISO, MDY\0S\0\0\0#standard_conforming_strings\0on\0S\0\0\0!session_authorization\0fraser\0S\0\0\0\31client_encoding\0UTF8\0S\0\0\0002server_version\00016.4 (Debian 16.4-1.pgdg120+2)\0S\0\0\0\31server_encoding\0UTF8\0K\0\0\0\f\0\0\1\201}\217\250\344Z\0\0\0\5I", 16384, 0, NULL, NULL) = 439
+
+sendto(3, "Q\0\0\0*SELECT id from performed_set LIMIT 1;\0", 43, MSG_NOSIGNAL, NULL, 0) = 43
+poll([{fd=3, events=POLLIN|POLLERR}], 1, -1) = 1 ([{fd=3, revents=POLLIN}])
+recvfrom(3, "T\0\0\0\33\0\1id\0\0\0@\211\0\1\0\0\0\27\0\4\377\377\377\377\0\0D\0\0\0\17\0\1\0\0\0\588233C\0\0\0\rSELECT 1\0Z\0\0\0\5I", 16384, 0, NULL, NULL) = 64
+
+write(1, "  id   \n", 8  id   
+)                = 8
+write(1, "-------\n", 8-------
+)                = 8
+write(1, " 88233\n", 7 88233
+)                 = 7
+write(1, "(1 row)\n", 8(1 row)
+)                = 8
+write(1, "\n", 1
+)                       = 1
+recvfrom(3, 0x55d668d839f0, 16384, 0, NULL, NULL) = -1 EAGAIN (Resource temporarily unavailable)
+sendto(3, "X\0\0\0\4", 5, MSG_NOSIGNAL, NULL, 0) = 5
+close(3)                                = 0
+exit_group(0)                           = ?
