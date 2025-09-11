@@ -11,6 +11,7 @@
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <thread>
 #include <unistd.h>
 
 HttpServer::HttpServer(int port) : _port(port) {}
@@ -48,11 +49,16 @@ int HttpServer::start() {
   }
 
   printf("Server started on http://localhost:%d\n", _port);
+  _handle_thread = std::thread(&HttpServer::_handle_clients, this);
+  return 0;
+}
+
+void HttpServer::_handle_clients() {
+  printf("Starting to handle clients\n");
   while (1) {
     int conn_fd = _accept_request();
     _handle_request(conn_fd);
   }
-  return 0;
 }
 
 int HttpServer::_accept_request() {
@@ -97,4 +103,4 @@ int HttpServer::_handle_request(int conn_fd) {
   close(file_fd);
   close(conn_fd);
   return 0;
-};
+}
