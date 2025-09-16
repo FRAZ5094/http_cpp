@@ -74,7 +74,9 @@ int HttpServer::_accept_request() {
 }
 
 int HttpServer::_handle_request(int conn_fd) {
-  char buffer[1024 * 8];
+  char buffer[1024];
+  // read till \r\n\r\n and if there is any more after that (from the next
+  // request run it again after processing the current message)
   read(conn_fd, &buffer, sizeof(buffer));
   int file_fd = open("index.html", O_RDONLY);
 
