@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
@@ -140,12 +141,9 @@ std::vector<struct Field> parse_row_dec(char **p) {
 
   int32_t row_desc_len = ntohl(*(int32_t *)p_in);
   p_in += sizeof(int32_t);
-  printf("row_desc_len: %u\n", row_desc_len);
 
   int16_t n_fields = ntohs(*(int16_t *)p_in);
   p_in += sizeof(int16_t);
-
-  printf("n_fields: %u\n", n_fields);
 
   std::vector<struct Field> fields(n_fields);
 
@@ -250,8 +248,6 @@ int main() {
   int32_t error = ntohl(*(int32_t *)buff_p);
   buff_p += sizeof(int32_t);
 
-  printf("len:%u, error:%u\n", msg_len, error);
-
   if (error != 0) {
     handle_error("Failed to authenticate");
   }
@@ -262,23 +258,39 @@ int main() {
   // https://wp.keploy.io/wp-content/uploads/2024/12/ReadyForQuery.png
 
   char query[] = "SELECT * FROM performed_set LIMIT 1;";
+  auto start = std::chrono::high_resolution_clock::now();
   send_simple_query(pg_fd, query);
 
   char res_buff[1024];
   int n2 = read(pg_fd, res_buff, sizeof(res_buff));
+
+  auto end = std::chrono::high_resolution_clock::now();
+
+  auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                .count();
+
+  printf("Duration of query: %ld us\n", dt);
 
   error = close(pg_fd);
   if (error == -1) {
     handle_perror("close");
   }
 
+  start = std::chrono::high_resolution_clock::now();
   char *res_buff_p = res_buff;
 
   std::vector<Field> fields = parse_row_dec(&res_buff_p);
   std::vector<std::optional<std::string>> values = parse_data_row(&res_buff_p);
+  end = std::chrono::high_resolution_clock::now();
 
-  for (auto value : values) {
-    printf("%s\n", value.value_or("NULL").c_str());
+  dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+           .count();
+
+  printf("Duration of parse: %ld us\n", dt);
+  for (int i = 0; i < values.size(); i++) {
+    Field field = fields[i];
+    std::string value = values[i].value_or("NULL");
+    printf("%s: %s\n", field.name.c_str(), value.c_str());
   }
 
   return 0;
