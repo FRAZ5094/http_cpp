@@ -5,20 +5,23 @@
 #include <cstring>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <optional>
 #include <stdio.h>
 #include <string>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <vector>
 
 void handle_perror(const char *msg) {
   perror(msg);
   exit(EXIT_FAILURE);
 }
 void handle_error(const char *msg) {
-  printf("%s", msg);
+  printf("%s\n", msg);
   exit(EXIT_FAILURE);
 }
 
@@ -118,6 +121,101 @@ int send_simple_query(int conn_fd, char *query) {
   return 0;
 }
 
+struct Field {
+  std::string name;
+  // int32_t table_object_id;
+  // int16_t col_attribute_number;
+  // int32_t data_type_object_id;
+  // int16_t data_type_size;
+  // int32_t type_modifier;
+  // int16_t format_code;
+};
+
+std::vector<struct Field> parse_row_dec(char **p) {
+  char *p_in = *p;
+  if (*p_in != 'T') {
+    handle_error("Response is not a row description");
+  }
+  p_in++;
+
+  int32_t row_desc_len = ntohl(*(int32_t *)p_in);
+  p_in += sizeof(int32_t);
+  printf("row_desc_len: %u\n", row_desc_len);
+
+  int16_t n_fields = ntohs(*(int16_t *)p_in);
+  p_in += sizeof(int16_t);
+
+  printf("n_fields: %u\n", n_fields);
+
+  std::vector<struct Field> fields(n_fields);
+
+  for (int i = 0; i < n_fields; i++) {
+    struct Field field;
+    field.name = p_in;
+    p_in += field.name.size() + 1;
+
+    // // SELECT 'table_name'::regclass::oid;
+    // memcpy(&field.table_object_id, p, sizeof(int32_t));
+    // field.table_object_id = ntohl(field.table_object_id);
+    // p += sizeof(int32_t);
+
+    // memcpy(&field.col_attribute_number, p, sizeof(int16_t));
+    // // select * from information_schema.columns where table_name =
+    // 'table_name' field.col_attribute_number =
+    // ntohs(field.col_attribute_number); p += sizeof(int16_t);
+
+    p_in += 18;
+
+    fields[i] = field;
+  }
+
+  // move the outer pointer to the point we ended at, this is to move to the
+  // next message
+  *p = p_in;
+  return fields;
+};
+
+std::vector<std::optional<std::string>> parse_data_row(char **p) {
+  char *p_in = *p;
+
+  if (*p_in++ != 'D') {
+    handle_error("This is not a DataRow message");
+  }
+
+  int32_t msg_len;
+  memcpy(&msg_len, p_in, sizeof(int32_t));
+  msg_len = ntohl(msg_len);
+  p_in += sizeof(int32_t);
+
+  // printf("Message length: %u\n", msg_len);
+
+  int16_t n_values;
+  memcpy(&n_values, p_in, sizeof(int16_t));
+  n_values = ntohs(n_values);
+  p_in += sizeof(int16_t);
+
+  // printf("Number of values: %u\n", n_values);
+
+  std::vector<std::optional<std::string>> values(n_values);
+
+  for (int i = 0; i < n_values; i++) {
+    int32_t value_len;
+    memcpy(&value_len, p_in, sizeof(int32_t));
+    value_len = ntohl(value_len);
+    p_in += sizeof(int32_t);
+
+    if (value_len > 0) {
+      std::string value = std::string(p_in, p_in + value_len);
+      values[i] = value;
+      p_in += value.size();
+    } else {
+      values[i] = {};
+    }
+  }
+
+  return values;
+}
+
 int main() {
 
   int pg_fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -138,11 +236,6 @@ int main() {
   if (n < 0) {
     handle_perror("read");
   }
-
-  for (int i = 0; i < n; i++) {
-    printf("%c", buff[i]);
-  }
-  printf("\n");
 
   char *buff_p = buff;
 
@@ -168,17 +261,24 @@ int main() {
   // ignore the rest of the ParameterStatus (S) message because I don't care
   // https://wp.keploy.io/wp-content/uploads/2024/12/ReadyForQuery.png
 
-  char query[] = "SELECT id FROM performed_set LIMIT 1;";
+  char query[] = "SELECT * FROM performed_set LIMIT 1;";
   send_simple_query(pg_fd, query);
 
   char res_buff[1024];
   int n2 = read(pg_fd, res_buff, sizeof(res_buff));
 
-  printf("after read\n");
-
   error = close(pg_fd);
-  if (error != -1) {
+  if (error == -1) {
     handle_perror("close");
+  }
+
+  char *res_buff_p = res_buff;
+
+  std::vector<Field> fields = parse_row_dec(&res_buff_p);
+  std::vector<std::optional<std::string>> values = parse_data_row(&res_buff_p);
+
+  for (auto value : values) {
+    printf("%s\n", value.value_or("NULL").c_str());
   }
 
   return 0;
