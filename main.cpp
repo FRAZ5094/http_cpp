@@ -107,7 +107,7 @@ int send_simple_query(int conn_fd, char *query) {
 
   *msg_p++ = 'Q';
 
-  memcpy(msg_p, &net_msg_len, msg_len);
+  memcpy(msg_p, &net_msg_len, sizeof(int32_t));
   msg_p += sizeof(int32_t);
 
   strcpy(msg_p, query);
@@ -116,8 +116,6 @@ int send_simple_query(int conn_fd, char *query) {
     handle_perror("send");
     return -1;
   }
-
-  printf("Sent query\n");
 
   return 0;
 }
@@ -211,11 +209,21 @@ std::vector<std::optional<std::string>> parse_data_row(char **p) {
     }
   }
 
+  *p = p_in;
+
   return values;
 }
-
 int main() {
+  // std::vector<char> vec;
 
+  // char buff2[10];
+  // for (int i = 0; i < 10; i++) {
+  //   buff2[i] = i;
+  // }
+
+  // vec.insert(vec.end(), buff2, buff2 + 10);
+
+  auto main_start = std::chrono::high_resolution_clock::now();
   int pg_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
   struct sockaddr_un addr{.sun_family = AF_UNIX,
@@ -225,7 +233,7 @@ int main() {
     handle_perror("connect");
   }
 
-  printf("Connected to postgres\n");
+  // printf("Connected to postgres\n");
 
   int ret = send_startup_message(pg_fd);
   char buff[1024];
@@ -252,17 +260,27 @@ int main() {
     handle_error("Failed to authenticate");
   }
 
-  printf("Successfully authenticated\n");
+  // printf("Successfully authenticated\n");
 
   // ignore the rest of the ParameterStatus (S) message because I don't care
   // https://wp.keploy.io/wp-content/uploads/2024/12/ReadyForQuery.png
 
-  char query[] = "SELECT * FROM performed_set LIMIT 1;";
+  char query[] = "SELECT * FROM performed_set_metric;";
   auto start = std::chrono::high_resolution_clock::now();
   send_simple_query(pg_fd, query);
 
-  char res_buff[1024];
-  int n2 = read(pg_fd, res_buff, sizeof(res_buff));
+  const int read_buff_size = 1024;
+
+  int n2 = read_buff_size;
+  char read_buff[read_buff_size];
+
+  std::vector<char> data_buff;
+  data_buff.reserve(read_buff_size);
+
+  while (n2 == read_buff_size) {
+    n2 = read(pg_fd, read_buff, sizeof(read_buff));
+    data_buff.insert(data_buff.end(), read_buff, read_buff + n2);
+  }
 
   auto end = std::chrono::high_resolution_clock::now();
 
@@ -277,21 +295,31 @@ int main() {
   }
 
   start = std::chrono::high_resolution_clock::now();
-  char *res_buff_p = res_buff;
+  char *res_buff_p = data_buff.data();
 
   std::vector<Field> fields = parse_row_dec(&res_buff_p);
-  std::vector<std::optional<std::string>> values = parse_data_row(&res_buff_p);
+  std::vector<std::vector<::std::optional<std::string>>> rows;
+  while (*res_buff_p == 'D') {
+    std::vector<std::optional<std::string>> values =
+        parse_data_row(&res_buff_p);
+    rows.push_back(values);
+  }
+
+  printf("Number of rows: %zu\n", rows.size());
   end = std::chrono::high_resolution_clock::now();
 
   dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
            .count();
 
   printf("Duration of parse: %ld us\n", dt);
-  for (int i = 0; i < values.size(); i++) {
-    Field field = fields[i];
-    std::string value = values[i].value_or("NULL");
-    printf("%s: %s\n", field.name.c_str(), value.c_str());
-  }
+
+  auto main_end = std::chrono::high_resolution_clock::now();
+
+  dt = std::chrono::duration_cast<std::chrono::microseconds>(main_end -
+                                                             main_start)
+           .count();
+
+  printf("Duration of whole program: %ld us\n", dt);
 
   return 0;
-};
+}
