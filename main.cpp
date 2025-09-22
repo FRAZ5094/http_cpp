@@ -228,7 +228,6 @@ long run() {
 
   // vec.insert(vec.end(), buff2, buff2 + 10);
 
-  auto main_start = std::chrono::high_resolution_clock::now();
   int pg_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
   struct sockaddr_un addr{.sun_family = AF_UNIX,
@@ -271,27 +270,25 @@ long run() {
   // https://wp.keploy.io/wp-content/uploads/2024/12/ReadyForQuery.png
 
   char query[] = "SELECT * FROM performed_set;";
-  auto start = std::chrono::high_resolution_clock::now();
+  auto main_start = std::chrono::high_resolution_clock::now();
   send_simple_query(pg_fd, query);
 
-  const int read_buff_size = 1024;
+  auto start = std::chrono::high_resolution_clock::now();
+  const int read_buff_size = 8192;
 
-  int n2 = read_buff_size;
+  size_t bytes_read = read_buff_size;
   char read_buff[read_buff_size];
+  // char *read_buff = (char *)malloc(read_buff_size);
 
   std::vector<char> data_buff;
-  data_buff.reserve(read_buff_size);
-
-  while (n2 == read_buff_size) {
-    n2 = read(pg_fd, read_buff, sizeof(read_buff));
-    data_buff.insert(data_buff.end(), read_buff, read_buff + n2);
+  while (bytes_read == read_buff_size) {
+    bytes_read = read(pg_fd, read_buff, read_buff_size);
+    data_buff.insert(data_buff.end(), read_buff, read_buff + bytes_read);
   }
 
   auto end = std::chrono::high_resolution_clock::now();
-
   auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
                 .count();
-
   // printf("Duration of query: %ld us\n", dt);
 
   error = close(pg_fd);
@@ -318,19 +315,20 @@ long run() {
 
   // printf("Duration of parse: %ld us\n", dt);
 
-  auto main_end = std::chrono::high_resolution_clock::now();
+  // auto main_end = std::chrono::high_resolution_clock::now();
 
-  dt = std::chrono::duration_cast<std::chrono::microseconds>(main_end -
-                                                             main_start)
-           .count();
+  // dt = std::chrono::duration_cast<std::chrono::microseconds>(main_end -
+  //                                                            main_start)
+  //          .count();
 
   // printf("Duration of whole program: %ld us\n", dt);
+  // printf("Test: %s\n", rows[0][0].value_or("NULL").begin());
 
   return dt;
 }
 
 int main() {
-  const int ITERATIONS = 50;
+  const int ITERATIONS = 100;
 
   long sum = 0;
   for (int i = 0; i < ITERATIONS; i++) {
