@@ -1,3 +1,4 @@
+#include <array>
 #include <chrono>
 #include <cinttypes>
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <optional>
 #include <stdio.h>
 #include <string>
+#include <string_view>
 #include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -171,7 +173,7 @@ std::vector<struct Field> parse_row_dec(char **p) {
   return fields;
 };
 
-std::vector<std::optional<std::string>> parse_data_row(char **p) {
+std::vector<std::optional<std::string_view>> parse_data_row(char **p) {
   char *p_in = *p;
 
   if (*p_in++ != 'D') {
@@ -192,7 +194,7 @@ std::vector<std::optional<std::string>> parse_data_row(char **p) {
 
   // printf("Number of values: %u\n", n_values);
 
-  std::vector<std::optional<std::string>> values(n_values);
+  std::vector<std::optional<std::string_view>> values(n_values);
 
   for (int i = 0; i < n_values; i++) {
     int32_t value_len;
@@ -201,9 +203,11 @@ std::vector<std::optional<std::string>> parse_data_row(char **p) {
     p_in += sizeof(int32_t);
 
     if (value_len > 0) {
-      std::string value = std::string(p_in, p_in + value_len);
+      // std::string value = std::string(p_in, p_in + value_len);
+      // Huge speed up
+      std::string_view value = std::string_view(p_in, value_len);
       values[i] = value;
-      p_in += value.size();
+      p_in += value_len;
     } else {
       values[i] = {};
     }
@@ -213,7 +217,8 @@ std::vector<std::optional<std::string>> parse_data_row(char **p) {
 
   return values;
 }
-int main() {
+
+long run() {
   // std::vector<char> vec;
 
   // char buff2[10];
@@ -265,7 +270,7 @@ int main() {
   // ignore the rest of the ParameterStatus (S) message because I don't care
   // https://wp.keploy.io/wp-content/uploads/2024/12/ReadyForQuery.png
 
-  char query[] = "SELECT * FROM performed_set_metric;";
+  char query[] = "SELECT * FROM performed_set;";
   auto start = std::chrono::high_resolution_clock::now();
   send_simple_query(pg_fd, query);
 
@@ -287,7 +292,7 @@ int main() {
   auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
                 .count();
 
-  printf("Duration of query: %ld us\n", dt);
+  // printf("Duration of query: %ld us\n", dt);
 
   error = close(pg_fd);
   if (error == -1) {
@@ -298,20 +303,20 @@ int main() {
   char *res_buff_p = data_buff.data();
 
   std::vector<Field> fields = parse_row_dec(&res_buff_p);
-  std::vector<std::vector<::std::optional<std::string>>> rows;
+  std::vector<std::vector<std::optional<std::string_view>>> rows;
   while (*res_buff_p == 'D') {
-    std::vector<std::optional<std::string>> values =
+    std::vector<std::optional<std::string_view>> values =
         parse_data_row(&res_buff_p);
     rows.push_back(values);
   }
 
-  printf("Number of rows: %zu\n", rows.size());
+  // printf("Number of rows: %zu\n", rows.size());
   end = std::chrono::high_resolution_clock::now();
 
   dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
            .count();
 
-  printf("Duration of parse: %ld us\n", dt);
+  // printf("Duration of parse: %ld us\n", dt);
 
   auto main_end = std::chrono::high_resolution_clock::now();
 
@@ -319,7 +324,20 @@ int main() {
                                                              main_start)
            .count();
 
-  printf("Duration of whole program: %ld us\n", dt);
+  // printf("Duration of whole program: %ld us\n", dt);
 
-  return 0;
+  return dt;
+}
+
+int main() {
+  const int ITERATIONS = 50;
+
+  long sum = 0;
+  for (int i = 0; i < ITERATIONS; i++) {
+    sum += run();
+  }
+
+  long avg = sum / ITERATIONS;
+
+  printf("Average runtime: %lu us\n", avg);
 }
