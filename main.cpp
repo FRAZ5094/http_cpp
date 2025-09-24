@@ -122,6 +122,55 @@ int send_simple_query(int conn_fd, char *query) {
   return 0;
 }
 
+int send_parse_command(int conn_fd, char *query) {
+  int16_t n_param_types = htons(0);
+
+  int query_len = strlen(query); //
+
+  int32_t msg_len = 1 +               // P
+                    sizeof(int32_t) + // message len
+                    query_len + 1 +   // string length
+                    1 +               // statement name
+                    sizeof(int16_t) + // n parameter types
+                    (n_param_types * sizeof(int32_t));
+  char buff[msg_len];
+  int32_t net_msg_len = htonl(msg_len - 1);
+
+  char *buff_p = buff;
+
+  *buff_p++ = 'P';
+
+  memcpy(buff_p, &net_msg_len, sizeof(int32_t));
+  buff_p += sizeof(int32_t);
+
+  // statement_name
+  *buff_p++ = '\0';
+
+  strcpy(buff_p, query);
+  buff_p += query_len + 1;
+
+  memcpy(buff_p, &n_param_types, sizeof(int16_t));
+  buff_p += sizeof(int16_t);
+
+  if (write(conn_fd, buff, sizeof(buff)) == -1) {
+    handle_perror("write");
+  }
+  char read_buff[1024];
+  int read_bytes = read(conn_fd, &read_buff, sizeof(read_buff));
+
+  for (int i = 0; i < read_bytes; i++) {
+    printf("%c", read_buff[i]);
+  }
+  printf("\n");
+
+  return 0;
+}
+
+int send_extended_query(int conn_fd, char *query) {
+  send_parse_command(conn_fd, query);
+  return 0;
+}
+
 struct Field {
   std::string name;
   // int32_t table_object_id;
@@ -218,6 +267,50 @@ std::vector<std::optional<std::string_view>> parse_data_row(char **p) {
   return values;
 }
 
+void handle_query_result(int pg_fd) {
+  auto start = std::chrono::high_resolution_clock::now();
+  const int read_buff_size = 8192;
+
+  size_t bytes_read = read_buff_size;
+  char read_buff[read_buff_size];
+  // char *read_buff = (char *)malloc(read_buff_size);
+
+  std::vector<char> data_buff;
+  while (bytes_read == read_buff_size) {
+    bytes_read = read(pg_fd, read_buff, read_buff_size);
+    data_buff.insert(data_buff.end(), read_buff, read_buff + bytes_read);
+  }
+
+  auto end = std::chrono::high_resolution_clock::now();
+  auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+                .count();
+  // printf("Duration of query: %ld us\n", dt);
+
+  int error = close(pg_fd);
+  if (error == -1) {
+    handle_perror("close");
+  }
+
+  start = std::chrono::high_resolution_clock::now();
+  char *res_buff_p = data_buff.data();
+
+  std::vector<Field> fields = parse_row_dec(&res_buff_p);
+  std::vector<std::vector<std::optional<std::string_view>>> rows;
+  while (*res_buff_p == 'D') {
+    std::vector<std::optional<std::string_view>> values =
+        parse_data_row(&res_buff_p);
+    rows.push_back(values);
+  }
+
+  // printf("Number of rows: %zu\n", rows.size());
+  end = std::chrono::high_resolution_clock::now();
+
+  dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
+           .count();
+
+  // printf("Duration of parse: %ld us\n", dt);
+}
+
 long run() {
   // std::vector<char> vec;
 
@@ -271,49 +364,10 @@ long run() {
 
   char query[] = "SELECT * FROM performed_set;";
   auto main_start = std::chrono::high_resolution_clock::now();
-  send_simple_query(pg_fd, query);
+  // send_simple_query(pg_fd, query);
+  send_extended_query(pg_fd, query);
 
-  auto start = std::chrono::high_resolution_clock::now();
-  const int read_buff_size = 8192;
-
-  size_t bytes_read = read_buff_size;
-  char read_buff[read_buff_size];
-  // char *read_buff = (char *)malloc(read_buff_size);
-
-  std::vector<char> data_buff;
-  while (bytes_read == read_buff_size) {
-    bytes_read = read(pg_fd, read_buff, read_buff_size);
-    data_buff.insert(data_buff.end(), read_buff, read_buff + bytes_read);
-  }
-
-  auto end = std::chrono::high_resolution_clock::now();
-  auto dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-                .count();
-  // printf("Duration of query: %ld us\n", dt);
-
-  error = close(pg_fd);
-  if (error == -1) {
-    handle_perror("close");
-  }
-
-  start = std::chrono::high_resolution_clock::now();
-  char *res_buff_p = data_buff.data();
-
-  std::vector<Field> fields = parse_row_dec(&res_buff_p);
-  std::vector<std::vector<std::optional<std::string_view>>> rows;
-  while (*res_buff_p == 'D') {
-    std::vector<std::optional<std::string_view>> values =
-        parse_data_row(&res_buff_p);
-    rows.push_back(values);
-  }
-
-  // printf("Number of rows: %zu\n", rows.size());
-  end = std::chrono::high_resolution_clock::now();
-
-  dt = std::chrono::duration_cast<std::chrono::microseconds>(end - start)
-           .count();
-
-  // printf("Duration of parse: %ld us\n", dt);
+  // handle_query_result(pg_fd);
 
   // auto main_end = std::chrono::high_resolution_clock::now();
 
@@ -324,11 +378,11 @@ long run() {
   // printf("Duration of whole program: %ld us\n", dt);
   // printf("Test: %s\n", rows[0][0].value_or("NULL").begin());
 
-  return dt;
+  return 0;
 }
 
 int main() {
-  const int ITERATIONS = 100;
+  const int ITERATIONS = 1;
 
   long sum = 0;
   for (int i = 0; i < ITERATIONS; i++) {
